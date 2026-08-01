@@ -29,9 +29,7 @@ target "custom-apps" {
     FRAPPE_BRANCH = FRAPPE_BRANCH
   }
 
-  tags = [
-    "${REGISTRY}/${REGISTRY_NAMESPACE}/${IMAGE_NAME}:${TAG}"
-  ]
+  tags = split(",", env.DOCKER_METADATA_OUTPUT_TAGS)
 
   platforms = [
     "linux/amd64"

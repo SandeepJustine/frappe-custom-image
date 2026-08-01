@@ -24,6 +24,8 @@ fi
 
 APPS_JSON_BASE64="$(base64 -w 0 apps.json)"
 
+export DOCKER_METADATA_OUTPUT_TAGS="${REGISTRY_NAMESPACE}/${IMAGE_NAME}:${TAG}"
+
 echo "Building ${REGISTRY_NAMESPACE}/${IMAGE_NAME}:${TAG} (frappe branch: ${FRAPPE_BRANCH})"
 
 docker buildx bake \
