@@ -2,14 +2,6 @@ variable "REGISTRY" {
   default = "ghcr.io"
 }
 
-variable "FRAPPE_DOCKER_REPO" {
-  default = "https://github.com/frappe/frappe_docker.git"
-}
-
-variable "FRAPPE_DOCKER_REF" {
-  default = "main"
-}
-
 variable "REGISTRY_NAMESPACE" {
   default = "sandeepjustine"
 }
@@ -26,22 +18,21 @@ variable "FRAPPE_BRANCH" {
   default = "version-16"
 }
 
-group "default" {
-  targets = ["custom-apps"]
-}
 
 target "custom-apps" {
 
-  context    = "${FRAPPE_DOCKER_REPO}#${FRAPPE_DOCKER_REF}"
+  context = "https://github.com/frappe/frappe_docker.git#main"
+
   dockerfile = "images/custom/Containerfile"
+
+  args = {
+    FRAPPE_BRANCH = FRAPPE_BRANCH
+    CACHE_BUST = "1"
+  }
 
   tags = [
     "${REGISTRY}/${REGISTRY_NAMESPACE}/${IMAGE_NAME}:${TAG}"
   ]
-
-  args = {
-    FRAPPE_BRANCH = FRAPPE_BRANCH
-  }
 
   platforms = [
     "linux/amd64"
