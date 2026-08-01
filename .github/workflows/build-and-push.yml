@@ -1,74 +1,48 @@
-name: Build ERPNext Custom Image
+variable "REGISTRY" {
+  default = "ghcr.io"
+}
 
-on:
-  push:
-    branches:
-      - main
+variable "REGISTRY_NAMESPACE" {
+  default = "sandeepjustine"
+}
 
-  workflow_dispatch:
+variable "IMAGE_NAME" {
+  default = "erpnext-custom"
+}
 
+variable "TAG" {
+  default = "latest"
+}
 
-env:
-  IMAGE_NAME: erpnext-custom
+variable "DOCKER_METADATA_OUTPUT_TAGS" {
+  default = ""
+}
 
+variable "FRAPPE_BRANCH" {
+  default = "version-16"
+}
 
-jobs:
+target "custom-apps" {
 
-  build:
+  context = "https://github.com/frappe/frappe_docker.git#main"
 
-    runs-on: ubuntu-latest
+  dockerfile = "images/custom/Containerfile"
 
-    permissions:
-      contents: read
-      packages: write
+  args = {
+    FRAPPE_BRANCH = FRAPPE_BRANCH
+  }
 
+  tags = split(",", DOCKER_METADATA_OUTPUT_TAGS)
 
-    steps:
+  platforms = [
+    "linux/amd64"
+  ]
 
-    - name: Checkout
-      uses: actions/checkout@v4
+  cache-from = [
+    "type=gha"
+  ]
 
-
-    - name: Setup Docker Buildx
-      uses: docker/setup-buildx-action@v3
-
-
-    - name: Login GHCR
-      uses: docker/login-action@v3
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-
-
-    - name: Docker metadata
-      id: meta
-      uses: docker/metadata-action@v5
-      with:
-        images: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
-        tags: |
-          type=sha
-          type=raw,value=latest
-        sep-tags: ','
-
-    - name: Prepare build arguments
-      id: prep
-      run: |
-        echo "apps_json_base64=$(base64 -w 0 apps.json)" >> $GITHUB_OUTPUT
-
-    - name: Build and push
-      uses: docker/bake-action@v5
-      with:
-        files: docker-bake.hcl
-        targets: custom-apps
-        push: true
-        set: |
-          custom-apps.args.APPS_JSON_BASE64=${{ steps.prep.outputs.apps_json_base64 }}
-      env:
-        DOCKER_METADATA_OUTPUT_TAGS: ${{ steps.meta.outputs.tags }}
-
-
-    - name: Verify image
-      run: |
-        echo "Image built:"
-        echo "${{ steps.meta.outputs.tags }}"
+  cache-to = [
+    "type=gha,mode=max"
+  ]
+}
