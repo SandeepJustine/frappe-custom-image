@@ -14,10 +14,13 @@ variable "TAG" {
   default = "latest"
 }
 
+variable "DOCKER_METADATA_OUTPUT_TAGS" {
+  default = ""
+}
+
 variable "FRAPPE_BRANCH" {
   default = "version-16"
 }
-
 
 target "custom-apps" {
 
@@ -29,7 +32,7 @@ target "custom-apps" {
     FRAPPE_BRANCH = FRAPPE_BRANCH
   }
 
-  tags = ["${REGISTRY}/${REGISTRY_NAMESPACE}/${IMAGE_NAME}:${TAG}"]
+  tags = split(",", DOCKER_METADATA_OUTPUT_TAGS)
 
   platforms = [
     "linux/amd64"
