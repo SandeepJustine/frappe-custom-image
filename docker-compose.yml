@@ -19,6 +19,7 @@
 # See COOLIFY_DEPLOYMENT.md for the full walkthrough, including the
 # one-time `bench new-site` step and common Coolify-specific gotchas.
 
+
 x-customizable-image: &customizable_image
   image: ${CUSTOM_IMAGE:-ghcr.io/sandeepjustine/erpnext-custom}:${CUSTOM_TAG:-latest}
   pull_policy: always
@@ -41,7 +42,7 @@ services:
       - --skip-character-set-client-handshake
       - --skip-innodb-read-only-compressed
     volumes:
-      - mariadb-data:/var/lib/mysql
+      - mariadb-data-v2:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${DB_ROOT_PASSWORD}"]
       interval: 10s
@@ -151,7 +152,7 @@ services:
       - websocket
 
 volumes:
-  mariadb-data:
+  mariadb-data-v2:
   redis-cache-data:
   redis-queue-data:
   sites:

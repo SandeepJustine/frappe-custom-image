@@ -31,7 +31,7 @@ variable "FRAPPE_DOCKER_REPO" {
 }
 
 variable "FRAPPE_DOCKER_REF" {
-  default = "main"
+  default = "v16.23.1"
 }
 
 variable "FRAPPE_PATH" {
@@ -90,7 +90,7 @@ target "custom-apps" {
   // Remote git context: "<repo>#<ref>" — buildx clones this directly,
   // so no submodule and no local checkout of frappe_docker is needed.
   context    = "${FRAPPE_DOCKER_REPO}#${FRAPPE_DOCKER_REF}"
-  dockerfile = "images/layered/Containerfile"
+  dockerfile = "images/custom/Containerfile"
 
   args = {
     FRAPPE_PATH      = FRAPPE_PATH

@@ -70,15 +70,16 @@ supports before deploying — mismatched MariaDB versions are a frequent
 source of cryptic migration/collation errors on first `bench new-site`,
 and it's a much easier fix before there's data in the volume than after.
 
-### Redis URL format
+### Redis / DB connection wiring
 
-The compose file sets `REDIS_CACHE` / `REDIS_QUEUE` as full URLs
-(`redis://redis-cache:6379`), which is the format the layered image's
-common_site_config expects. If you ever hand-edit
-`sites/common_site_config.json` inside the container, keep this
-`redis://host:port` form — a bare `host:port` without the scheme will
-fail silently in ways that only show up when a background job tries to
-enqueue.
+Connection details reach Frappe through `sites/common_site_config.json`,
+not directly through environment variables on `backend`/`websocket`.
+The `configurator` service in `docker-compose.yml` runs once per deploy
+(`bench set-config ...`), writes that file, then exits — every other
+service `depends_on: configurator: condition: service_completed_successfully`.
+If you ever see `ECONNREFUSED 127.0.0.1:6379` in `backend` or `websocket`
+logs, it means `configurator` didn't run or didn't finish before the
+other services started; check its logs/exit code first.
 
 ## 5. Create the site (one-time)
 
@@ -140,6 +141,7 @@ to a mounted volume you separately back up off the Coolify server.
 |---|---|
 | `504 Gateway Timeout` on the site domain | Traefik routing to the wrong/old container, or `frontend` up but `backend` still crash-looping — check `backend` logs first |
 | `backend` restarts forever | Site not created yet (step 5), or `DB_ROOT_PASSWORD` mismatch between `mariadb` and `backend`/`frontend` env |
-| Background jobs (emails, scheduled reports) never run | `scheduler` or `queue-*` containers not actually running — check they're not silently crash-looping; verify `REDIS_QUEUE` URL format |
+| `websocket` (or `backend`) crashes with `ECONNREFUSED 127.0.0.1:6379` | The `configurator` service didn't run (or was removed from the compose file) — it's what writes Redis/DB connection details into `sites/common_site_config.json`; without it, the Node realtime process falls back to `localhost` and fails. Confirm `configurator` shows "Exited (0)" in Coolify before `backend`/`websocket` start, and that they still `depends_on: configurator: condition: service_completed_successfully` |
+| Background jobs (emails, scheduled reports) never run | `scheduler` or `queue-*` containers not actually running — check they're not silently crash-looping; verify `common_site_config.json` has the right `redis_queue` value (set by `configurator`, not by env vars alone) |
 | New app not visible after redeploy | You updated `apps.json`/rebuilt the image but forgot `bench install-app` on the existing site (step 6.3) |
 | Deploy uses an old image despite a new push | `CUSTOM_TAG` still set to a stale tag, or Coolify's registry cache — set `pull_policy: always` (already set in this compose file) and force a redeploy |

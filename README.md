@@ -11,7 +11,7 @@ This repo owns exactly three things:
 1. **`apps.json`** — which apps (and which branch of each) go into the
    image.
 2. **`docker-bake.hcl`** — a `docker buildx bake` file that points at
-   `frappe_docker`'s `images/layered/Containerfile` as a remote build
+   `frappe_docker`'s `images/custom/Containerfile` as a remote build
    context, so you always build with the same Containerfile the Frappe
    team maintains and tests.
 3. **`.github/workflows/build-and-push.yml`** — CI that builds, tags,
