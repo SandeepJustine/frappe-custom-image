@@ -1,24 +1,12 @@
-variable "REGISTRY" {
-  default = "ghcr.io"
-}
-
-variable "REGISTRY_NAMESPACE" {
-  default = "sandeepjustine"
-}
-
-variable "IMAGE_NAME" {
-  default = "erpnext-custom"
-}
-
-variable "TAG" {
-  default = "latest"
-}
-
 variable "FRAPPE_BRANCH" {
   default = "version-16"
 }
 
 variable "APPS_JSON_BASE64" {
+  default = ""
+}
+
+variable "TAGS" {
   default = ""
 }
 
@@ -31,7 +19,7 @@ target "custom-apps" {
     APPS_JSON_BASE64 = APPS_JSON_BASE64
   }
   
-  tags = split(",", env.DOCKER_METADATA_OUTPUT_TAGS)
+  tags = TAGS != "" ? split(",", TAGS) : ["ghcr.io/sandeepjustine/erpnext-custom:latest"]
   
   platforms = [
     "linux/amd64"
