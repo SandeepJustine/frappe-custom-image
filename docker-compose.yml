@@ -1,10 +1,20 @@
 # Coolify deployment compose file.
 #
-# This intentionally mirrors the structure of frappe_docker's own
-# pwd.yml / compose.yaml (mariadb + redis-cache + redis-queue + backend
-# + websocket + scheduler + queue workers + frontend/nginx) but points
-# `image:` at the custom image this repo's CI publishes to GHCR instead
-# of the stock frappe/erpnext image.
+# This mirrors the structure of frappe_docker's own pwd.yml / production
+# compose (mariadb + redis-cache + redis-queue + a one-shot "configurator"
+# + backend + websocket + scheduler + queue workers + frontend/nginx) but
+# points `image:` at the custom image this repo's CI publishes to GHCR
+# instead of the stock frappe/erpnext image.
+#
+# IMPORTANT: the "configurator" service below is not optional. Frappe's
+# backend and the Node.js realtime/socketio service read Redis/DB
+# connection details from sites/common_site_config.json, NOT from
+# environment variables directly. configurator is a one-shot container
+# that runs `bench set-config` to write that file, then exits
+# successfully; every long-running service depends_on it with
+# `condition: service_completed_successfully` so it always runs first.
+# Skipping it is what causes `ECONNREFUSED 127.0.0.1:6379` on websocket/
+# backend — they fall back to Node's/Frappe's default of localhost.
 #
 # See COOLIFY_DEPLOYMENT.md for the full walkthrough, including the
 # one-time `bench new-site` step and common Coolify-specific gotchas.
@@ -14,21 +24,10 @@ x-customizable-image: &customizable_image
   pull_policy: always
   restart: unless-stopped
 
-x-backend-defaults: &backend_defaults
-  <<: *customizable_image
-  environment:
-    DB_HOST: mariadb
-    DB_PORT: "3306"
-    REDIS_CACHE: redis://redis-cache:6379
-    REDIS_QUEUE: redis://redis-queue:6379
-    SOCKETIO_PORT: "9000"
-  volumes:
-    - sites:/home/frappe/frappe-bench/sites
-    - logs:/home/frappe/frappe-bench/logs
+x-depends-on-configurator: &depends_on_configurator
   depends_on:
-    - mariadb
-    - redis-cache
-    - redis-queue
+    configurator:
+      condition: service_completed_successfully
 
 services:
   mariadb:
@@ -61,40 +60,71 @@ services:
     volumes:
       - redis-queue-data:/data
 
-  backend:
-    <<: *backend_defaults
-    # entrypoint/command inherited from the image; frappe_docker's
-    # layered image already knows how to start gunicorn for the backend
-    # role via the base configurator/entrypoint scripts.
-
-  websocket:
+  # One-shot: writes db_host/redis_cache/redis_queue/socketio_port into
+  # sites/common_site_config.json, then exits 0. Everything else waits
+  # on it. Re-runs on every `docker compose up` / Coolify redeploy, which
+  # is safe and idempotent (bench set-config just overwrites the keys).
+  configurator:
     <<: *customizable_image
-    command: ["node", "/home/frappe/frappe-bench/apps/frappe/socketio.js"]
+    entrypoint: ["bash", "-c"]
+    command:
+      - >
+        ls -1 apps > sites/apps.txt;
+        bench set-config -g db_host "$$DB_HOST";
+        bench set-config -gp db_port "$$DB_PORT";
+        bench set-config -g redis_cache "redis://$$REDIS_CACHE";
+        bench set-config -g redis_queue "redis://$$REDIS_QUEUE";
+        bench set-config -g redis_socketio "redis://$$REDIS_QUEUE";
+        bench set-config -gp socketio_port "$$SOCKETIO_PORT";
     environment:
       DB_HOST: mariadb
       DB_PORT: "3306"
-      REDIS_CACHE: redis://redis-cache:6379
-      REDIS_QUEUE: redis://redis-queue:6379
+      REDIS_CACHE: redis-cache:6379
+      REDIS_QUEUE: redis-queue:6379
       SOCKETIO_PORT: "9000"
     volumes:
       - sites:/home/frappe/frappe-bench/sites
-      - logs:/home/frappe/frappe-bench/logs
     depends_on:
-      - mariadb
-      - redis-cache
-      - redis-queue
+      mariadb:
+        condition: service_healthy
+    restart: "no"
+
+  backend:
+    <<: [*customizable_image, *depends_on_configurator]
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+    # entrypoint/command inherited from the image; frappe_docker's
+    # layered image already knows how to start gunicorn for the backend
+    # role via the base entrypoint script.
+
+  websocket:
+    <<: [*customizable_image, *depends_on_configurator]
+    command: ["node", "/home/frappe/frappe-bench/apps/frappe/socketio.js"]
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
 
   queue-short:
-    <<: *backend_defaults
+    <<: [*customizable_image, *depends_on_configurator]
     command: ["bench", "worker", "--queue", "short,default"]
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
 
   queue-long:
-    <<: *backend_defaults
+    <<: [*customizable_image, *depends_on_configurator]
     command: ["bench", "worker", "--queue", "long,default,short"]
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
 
   scheduler:
-    <<: *backend_defaults
+    <<: [*customizable_image, *depends_on_configurator]
     command: ["bench", "schedule"]
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
 
   frontend:
     <<: *customizable_image

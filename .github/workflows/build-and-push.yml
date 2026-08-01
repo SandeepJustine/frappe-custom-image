@@ -112,6 +112,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Debug - print resolved bake config
+        env:
+          REGISTRY_NAMESPACE: ${{ steps.namespace.outputs.namespace }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          TAG: ${{ steps.version.outputs.tag }}
+          PUSH_LATEST: ${{ steps.version.outputs.push_latest }}
+          APPS_JSON_BASE64: ${{ steps.apps.outputs.apps_json_base64 }}
+          FRAPPE_BRANCH: ${{ inputs.frappe_branch || 'version-16' }}
+        run: |
+          docker buildx bake --file docker-bake.hcl --print custom-apps \
+            --set custom-apps.args.APPS_JSON_BASE64="${APPS_JSON_BASE64}" \
+            | tee /tmp/resolved-bake-config.json
+          echo "----"
+          echo "Length of APPS_JSON_BASE64 the workflow computed: ${#APPS_JSON_BASE64} chars"
+          echo "Decoded apps.json the workflow computed:"
+          echo "${APPS_JSON_BASE64}" | base64 -d
+
       - name: Build and push via docker buildx bake
         uses: docker/bake-action@v5
         env:
@@ -127,6 +144,7 @@ jobs:
           push: true
           set: |
             custom-apps.args.APPS_JSON_BASE64=${{ steps.apps.outputs.apps_json_base64 }}
+            custom-apps.args.FRAPPE_BRANCH=${{ inputs.frappe_branch || 'version-16' }}
 
       - name: Summary
         run: |
