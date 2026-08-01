@@ -22,6 +22,10 @@ variable "FRAPPE_BRANCH" {
   default = "version-16"
 }
 
+variable "APPS_JSON_BASE64" {
+  default = ""
+}
+
 target "custom-apps" {
 
   context = "https://github.com/frappe/frappe_docker.git#main"
@@ -30,6 +34,7 @@ target "custom-apps" {
 
   args = {
     FRAPPE_BRANCH = FRAPPE_BRANCH
+    APPS_JSON_BASE64 = APPS_JSON_BASE64
   }
 
   tags = split(",", DOCKER_METADATA_OUTPUT_TAGS)
