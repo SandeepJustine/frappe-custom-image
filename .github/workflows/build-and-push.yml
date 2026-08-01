@@ -64,7 +64,6 @@ jobs:
         push: true
         set: |
           custom-apps.args.APPS_JSON_BASE64=${{ steps.prep.outputs.apps_json_base64 }}
-          DOCKER_METADATA_OUTPUT_TAGS=${{ steps.meta.outputs.tags }}
       env:
         DOCKER_METADATA_OUTPUT_TAGS: ${{ steps.meta.outputs.tags }}
 
