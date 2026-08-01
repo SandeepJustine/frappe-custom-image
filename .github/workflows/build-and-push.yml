@@ -1,0 +1,130 @@
+name: Build and Push Custom Frappe Image
+
+# Triggers:
+# - push to main touching apps.json / docker-bake.hcl / this workflow -> build + push :latest + a dated tag
+# - pushing a git tag like v1.2.3 -> build + push that exact semantic tag (no :latest bump unless on main)
+# - manual dispatch -> optional custom tag + choice of pushing :latest
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps.json"
+      - "docker-bake.hcl"
+      - ".github/workflows/build-and-push.yml"
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Override tag (leave blank to auto-generate)"
+        required: false
+        type: string
+      push_latest:
+        description: "Also push :latest"
+        required: false
+        type: boolean
+        default: true
+      frappe_branch:
+        description: "Frappe branch to build against"
+        required: false
+        default: "version-16"
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: erpnext-custom
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate apps.json
+        run: |
+          if ! python3 -m json.tool apps.json > /dev/null; then
+            echo "::error::apps.json is not valid JSON"
+            exit 1
+          fi
+          echo "apps.json is valid:"
+          cat apps.json
+
+      - name: Compute version tag
+        id: version
+        run: |
+          set -euo pipefail
+          SHORT_SHA=$(git rev-parse --short=7 HEAD)
+          DATE=$(date -u +'%Y.%m.%d')
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.tag }}" ]]; then
+            TAG="${{ inputs.tag }}"
+          elif [[ "${{ github.ref_type }}" == "tag" ]]; then
+            # Triggered by a pushed git tag e.g. refs/tags/v1.2.3
+            TAG="${GITHUB_REF_NAME}"
+          else
+            # Regular push to main -> date + short sha, always unique and sortable
+            TAG="build-${DATE}-${SHORT_SHA}"
+          fi
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            PUSH_LATEST="${{ inputs.push_latest }}"
+          elif [[ "${{ github.ref_type }}" == "tag" ]]; then
+            PUSH_LATEST="false"
+          else
+            PUSH_LATEST="true"
+          fi
+
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "push_latest=${PUSH_LATEST}" >> "$GITHUB_OUTPUT"
+          echo "Resolved image tag: ${TAG} (push_latest=${PUSH_LATEST})"
+
+      - name: Base64-encode apps.json
+        id: apps
+        run: |
+          echo "apps_json_base64=$(base64 -w 0 apps.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push via docker buildx bake
+        uses: docker/bake-action@v5
+        env:
+          REGISTRY_NAMESPACE: ${{ github.repository_owner }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          TAG: ${{ steps.version.outputs.tag }}
+          PUSH_LATEST: ${{ steps.version.outputs.push_latest }}
+          APPS_JSON_BASE64: ${{ steps.apps.outputs.apps_json_base64 }}
+          FRAPPE_BRANCH: ${{ inputs.frappe_branch || 'version-16' }}
+        with:
+          files: docker-bake.hcl
+          targets: custom-apps
+          push: true
+          set: |
+            custom-apps.args.APPS_JSON_BASE64=${{ steps.apps.outputs.apps_json_base64 }}
+
+      - name: Summary
+        run: |
+          echo "### Image published :rocket:" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.tag }}\`" >> "$GITHUB_STEP_SUMMARY"
+          if [[ "${{ steps.version.outputs.push_latest }}" == "true" ]]; then
+            echo "- \`${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest\`" >> "$GITHUB_STEP_SUMMARY"
+          fi
