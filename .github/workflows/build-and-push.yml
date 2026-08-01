@@ -129,15 +129,8 @@ jobs:
           echo "Decoded apps.json the workflow computed:"
           echo "${APPS_JSON_BASE64}" | base64 -d
 
-      - name: Build and push via docker buildx bake
+      - name: Build image
         uses: docker/bake-action@v5
-        env:
-          REGISTRY_NAMESPACE: ${{ steps.namespace.outputs.namespace }}
-          IMAGE_NAME: ${{ env.IMAGE_NAME }}
-          TAG: ${{ steps.version.outputs.tag }}
-          PUSH_LATEST: ${{ steps.version.outputs.push_latest }}
-          APPS_JSON_BASE64: ${{ steps.apps.outputs.apps_json_base64 }}
-          FRAPPE_BRANCH: ${{ inputs.frappe_branch || 'version-16' }}
         with:
           files: docker-bake.hcl
           targets: custom-apps
@@ -145,6 +138,16 @@ jobs:
           set: |
             custom-apps.args.APPS_JSON_BASE64=${{ steps.apps.outputs.apps_json_base64 }}
             custom-apps.args.FRAPPE_BRANCH=${{ inputs.frappe_branch || 'version-16' }}
+            custom-apps.tags=["${{ env.REGISTRY }}/${{ steps.namespace.outputs.namespace }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.tag }}"${{ steps.version.outputs.push_latest == 'true' && format(', "{0}/{1}/{2}:latest"', env.REGISTRY, steps.namespace.outputs.namespace, env.IMAGE_NAME) || '' }}]
+
+      - name: Verify apps
+        run: |
+          docker run --rm \
+            ${{ env.REGISTRY }}/${{ steps.namespace.outputs.namespace }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.tag }} \
+            bash -c "
+            echo 'Installed apps:'
+            ls -1 /home/frappe/frappe-bench/apps
+            "
 
       - name: Summary
         run: |
