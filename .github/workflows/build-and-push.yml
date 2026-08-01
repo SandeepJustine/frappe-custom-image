@@ -49,7 +49,12 @@ jobs:
         tags: |
           type=sha
           type=raw,value=latest
+        sep-tags: ','
 
+    - name: Prepare build arguments
+      id: prep
+      run: |
+        echo "apps_json_base64=$(base64 -w 0 apps.json)" >> $GITHUB_OUTPUT
 
     - name: Build and push
       uses: docker/bake-action@v5
@@ -59,6 +64,7 @@ jobs:
         push: true
         set: |
           custom-apps.tags=${{ steps.meta.outputs.tags }}
+          custom-apps.args.APPS_JSON_BASE64=${{ steps.prep.outputs.apps_json_base64 }}
       env:
         DOCKER_METADATA_OUTPUT_TAGS: ${{ steps.meta.outputs.tags }}
 

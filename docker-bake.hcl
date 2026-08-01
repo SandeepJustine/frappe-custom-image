@@ -27,7 +27,6 @@ target "custom-apps" {
 
   args = {
     FRAPPE_BRANCH = FRAPPE_BRANCH
-    CACHE_BUST = "1"
   }
 
   tags = [
