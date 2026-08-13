@@ -18,5 +18,9 @@
   {
     "url": "https://github.com/frappe/helpdesk",
     "branch": "version-16"
+  },
+  {
+    "url": "https://github.com/frappe/education",
+    "branch": "version-16"
   }
 ]
